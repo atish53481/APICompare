@@ -1,0 +1,7 @@
+{
+  "name": "api-comparator-v3",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}

@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>API Comparator — Migration Validator</title>
+  <meta name="description" content="Compare OutSystems and .NET microservice APIs side-by-side with detailed JSON diff and exportable MD reports."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+          <rect x="2" y="2" width="10" height="10" rx="2" fill="url(#g1)"/>
+          <rect x="16" y="2" width="10" height="10" rx="2" fill="url(#g2)"/>
+          <rect x="2" y="16" width="10" height="10" rx="2" fill="url(#g2)" opacity="0.6"/>
+          <rect x="16" y="16" width="10" height="10" rx="2" fill="url(#g1)" opacity="0.6"/>
+          <path d="M12 7h4M14 5v4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <defs>
+            <linearGradient id="g1" x1="2" y1="2" x2="12" y2="12" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/>
+            </linearGradient>
+            <linearGradient id="g2" x1="16" y1="2" x2="26" y2="12" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#06b6d4"/><stop offset="1" stop-color="#3b82f6"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <div>
+        <span class="brand-name">API Comparator</span>
+        <span class="brand-tag">Migration Validator</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="vpn-badge" id="vpnBadge">🔒 VPN Mode</span>
+      <button class="btn-ghost" id="clearAllBtn">Clear All</button>
+      <button class="btn-primary" id="runCompareBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg>
+        Run Comparison
+      </button>
+    </div>
+  </header>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <button class="tab active" data-tab="configure">⚙️ Configure APIs</button>
+    <button class="tab" data-tab="results">📊 Results</button>
+    <button class="tab" data-tab="report">📄 MD Report</button>
+  </div>
+
+  <main class="main-wrap">
+
+    <!-- ======= CONFIGURE TAB ======= -->
+    <section class="tab-panel active" id="tab-configure">
+
+      <!-- Import Modal (shared, triggered from per-card buttons) -->
+      <div class="modal-backdrop hidden" id="importModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="modal-header-inner">
+              <span id="modalTitle">Import</span>
+              <span id="modalTargetBadge" class="api-badge api1-badge">API 1</span>
+            </div>
+            <button class="modal-close" id="modalClose">✕</button>
+          </div>
+          <div class="modal-body">
+            <!-- Import type tabs -->
+            <div class="import-type-tabs">
+              <button class="import-type-tab active" id="tabCurlBtn" data-mode="curl">📋 cURL Command</button>
+              <button class="import-type-tab" id="tabJsonBtn" data-mode="json">📂 JSON Collection</button>
+            </div>
+            <div id="curlInputGroup">
+              <label class="form-label-sm">Paste cURL Command</label>
+              <textarea id="curlInput" class="mono-area" rows="9"
+                placeholder="curl -X POST 'https://api.example.com/endpoint' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TOKEN' \
+  -d '{&quot;key&quot;:&quot;value&quot;}'"></textarea>
+            </div>
+            <div class="hidden" id="jsonInputGroup">
+              <label class="form-label-sm">Paste Postman / JSON Collection</label>
+              <textarea id="jsonInput" class="mono-area" rows="9" placeholder='Paste Postman v2.1 collection JSON here...'></textarea>
+              <div class="hint">First request in collection will be imported</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-ghost" id="modalCancelBtn">Cancel</button>
+            <button class="btn-primary" id="modalImportBtn">Import into <span id="modalImportTargetLabel">API 1</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Cards Grid -->
+      <div class="api-grid">
+
+        <!-- ===== API 1 ===== -->
+        <div class="api-card api1-card">
+          <!-- Card Header with inline import buttons -->
+          <div class="api-card-header">
+            <div class="api-badge api1-badge">API 1</div>
+            <span class="api-label">Old API (OutSystems)</span>
+            <div class="card-header-actions">
+              <button class="card-import-btn" data-target="api1" data-mode="curl" title="Import cURL into API 1">📋 cURL</button>
+              <button class="card-import-btn" data-target="api1" data-mode="json" title="Import JSON Collection into API 1">📂 Collection</button>
+              <button class="reset-btn" id="resetApi1Btn" title="Reset API 1">↺</button>
+            </div>
+          </div>
+
+          <!-- Inner tab nav (Overview / Auth / Headers / Body / Params) -->
+          <div class="inner-tabs">
+            <button class="inner-tab active" data-api="1" data-panel="request">Request</button>
+            <button class="inner-tab" data-api="1" data-panel="auth">🔐 Authorization</button>
+            <button class="inner-tab" data-api="1" data-panel="console">🛠 Console</button>
+          </div>
+
+          <!-- REQUEST PANEL -->
+          <div class="inner-panel" id="api1-panel-request">
+            <div class="form-row">
+              <div class="method-select-wrap">
+                <select id="api1Method" class="method-select">
+                  <option>GET</option><option selected>POST</option>
+                  <option>PUT</option><option>PATCH</option><option>DELETE</option>
+                </select>
+              </div>
+              <input id="api1Url" class="url-input" type="url" placeholder="https://outsystems-instance.company.com/api/endpoint"/>
+            </div>
+
+            <div class="subsection-label">Headers</div>
+            <div id="api1Headers" class="kv-list">
+              <div class="kv-row">
+                <input class="kv-key" placeholder="Key" value="Content-Type"/>
+                <input class="kv-val" placeholder="Value" value="application/json"/>
+                <button class="kv-del">✕</button>
+              </div>
+            </div>
+            <button class="add-kv-btn" data-target="api1Headers">+ Add Header</button>
+
+            <div class="subsection-label">Request Body <span class="hint-inline">(JSON)</span></div>
+            <textarea id="api1Body" class="mono-area body-area" rows="6" placeholder='{"key": "value"}'></textarea>
+
+            <div class="subsection-label">Query Params</div>
+            <div id="api1Params" class="kv-list"></div>
+            <button class="add-kv-btn" data-target="api1Params">+ Add Param</button>
+
+            <!-- Send Button -->
+            <div class="send-bar">
+              <button class="btn-send api1-send" id="sendApi1Btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Send Request
+              </button>
+              <span class="send-status" id="send1Status"></span>
+            </div>
+            <!-- Inline Response -->
+            <div class="inline-response hidden" id="inlineResp1">
+              <div class="inline-resp-header">
+                <span class="inline-resp-title">Response</span>
+                <span id="inline1StatusPill" class="status-pill"></span>
+                <span id="inline1TimePill" class="time-pill"></span>
+                <span id="inline1SizePill" class="size-pill"></span>
+                <button class="inline-resp-close" id="closeInline1">✕</button>
+              </div>
+              <div class="inline-resp-tabs">
+                <button class="iresp-tab active" data-resp="1" data-pane="body">Body</button>
+                <button class="iresp-tab" data-resp="1" data-pane="headers">Headers</button>
+              </div>
+              <pre class="inline-resp-pre" id="inline1Body"></pre>
+              <pre class="inline-resp-pre hidden" id="inline1Headers"></pre>
+            </div>
+          </div>
+
+          <!-- AUTH PANEL -->
+          <div class="inner-panel hidden" id="api1-panel-auth">
+            <div class="auth-type-row">
+              <label class="form-label-sm">Auth Type</label>
+              <select id="api1AuthType" class="auth-type-select">
+                <option value="none">No Auth</option>
+                <option value="bearer" selected>Bearer Token</option>
+                <option value="basic">Basic Auth</option>
+                <option value="apikey">API Key</option>
+                <option value="oauth2">OAuth 2.0</option>
+                <option value="jwt">JWT Bearer</option>
+                <option value="digest">Digest Auth</option>
+              </select>
+            </div>
+            <div class="auth-desc" id="api1AuthDesc">Token will be added to the Authorization header as <code>Bearer &lt;token&gt;</code></div>
+
+            <!-- Bearer Token -->
+            <div class="auth-fields" id="api1-auth-bearer">
+              <label class="form-label-sm">Token</label>
+              <div class="auth-input-row">
+                <input id="api1BearerToken" class="inline-input" type="text" placeholder="eyJhbGciOiJSUzI1NiJ9..."/>
+                <button class="btn-auth-apply" data-api="1" data-type="bearer">Apply →</button>
+              </div>
+            </div>
+
+            <!-- Basic Auth -->
+            <div class="auth-fields hidden" id="api1-auth-basic">
+              <label class="form-label-sm">Username</label>
+              <input id="api1BasicUser" class="inline-input" type="text" placeholder="username" style="margin-bottom:8px"/>
+              <label class="form-label-sm">Password</label>
+              <div class="auth-input-row">
+                <input id="api1BasicPass" class="inline-input" type="password" placeholder="password"/>
+                <button class="btn-auth-apply" data-api="1" data-type="basic">Apply →</button>
+              </div>
+            </div>
+
+            <!-- API Key -->
+            <div class="auth-fields hidden" id="api1-auth-apikey">
+              <label class="form-label-sm">Key Name</label>
+              <input id="api1ApiKeyName" class="inline-input" type="text" placeholder="X-API-Key" value="X-API-Key" style="margin-bottom:8px"/>
+              <label class="form-label-sm">Key Value</label>
+              <div class="auth-input-row">
+                <input id="api1ApiKeyVal" class="inline-input" type="text" placeholder="your-api-key-value"/>
+                <button class="btn-auth-apply" data-api="1" data-type="apikey">Apply →</button>
+              </div>
+              <label class="form-label-sm" style="margin-top:8px">Add to</label>
+              <select id="api1ApiKeyIn" class="auth-type-select" style="margin-top:4px">
+                <option value="header">Header</option>
+                <option value="query">Query Param</option>
+              </select>
+            </div>
+
+            <!-- OAuth 2.0 -->
+            <div class="auth-fields hidden" id="api1-auth-oauth2">
+              <div class="oauth-grid">
+                <div class="form-group-inline">
+                  <label class="form-label-sm">Grant Type</label>
+                  <select id="api1OauthGrant" class="method-select">
+                    <option value="client_credentials">Client Credentials</option>
+                    <option value="password">Password (ROPC)</option>
+                    <option value="custom_token">Paste Token Directly</option>
+                  </select>
+                </div>
+                <div class="form-group-inline" id="api1TokenUrlGroup">
+                  <label class="form-label-sm">Token URL</label>
+                  <input id="api1TokenUrl" class="inline-input" type="url" placeholder="https://auth.server.com/oauth/token"/>
+                </div>
+                <div class="form-group-inline" id="api1ClientIdGroup">
+                  <label class="form-label-sm">Client ID</label>
+                  <input id="api1ClientId" class="inline-input" type="text" placeholder="client_id"/>
+                </div>
+                <div class="form-group-inline" id="api1ClientSecretGroup">
+                  <label class="form-label-sm">Client Secret</label>
+                  <input id="api1ClientSecret" class="inline-input" type="password" placeholder="client_secret"/>
+                </div>
+                <div class="form-group-inline hidden" id="api1UsernameGroup">
+                  <label class="form-label-sm">Username</label>
+                  <input id="api1Username" class="inline-input" type="text" placeholder="username"/>
+                </div>
+                <div class="form-group-inline hidden" id="api1PasswordGroup">
+                  <label class="form-label-sm">Password</label>
+                  <input id="api1Password" class="inline-input" type="password" placeholder="password"/>
+                </div>
+                <div class="form-group-inline" id="api1ScopeGroup">
+                  <label class="form-label-sm">Scope <span class="hint-inline">(optional)</span></label>
+                  <input id="api1Scope" class="inline-input" type="text" placeholder="api read write"/>
+                </div>
+                <div class="form-group-inline hidden" id="api1DirectTokenGroup" style="grid-column:1/-1">
+                  <label class="form-label-sm">Paste Token</label>
+                  <textarea id="api1DirectToken" class="mono-area" rows="2" placeholder="eyJhbGciOiJSUzI1NiJ9..."></textarea>
+                </div>
+              </div>
+              <div class="oauth-footer">
+                <button class="btn-oauth" id="getToken1Btn">
+                  <span id="getToken1Spinner" class="mini-spinner hidden"></span>
+                  ⚡ Get Token &amp; Inject
+                </button>
+                <span id="oauth1Info" class="oauth-info"></span>
+              </div>
+            </div>
+
+            <!-- JWT Bearer -->
+            <div class="auth-fields hidden" id="api1-auth-jwt">
+              <label class="form-label-sm">Algorithm</label>
+              <select id="api1JwtAlgo" class="auth-type-select" style="margin-bottom:8px">
+                <option>HS256</option><option>HS384</option><option>HS512</option><option>RS256</option>
+              </select>
+              <label class="form-label-sm">Secret / Key</label>
+              <input id="api1JwtSecret" class="inline-input" type="text" placeholder="secret or PEM key" style="margin-bottom:8px"/>
+              <label class="form-label-sm">Payload (JSON)</label>
+              <div class="auth-input-row">
+                <textarea id="api1JwtPayload" class="mono-area" rows="3" placeholder='{"sub":"user","iat":1700000000}'></textarea>
+              </div>
+              <div class="auth-input-row" style="margin-top:8px">
+                <button class="btn-auth-apply" data-api="1" data-type="jwt">Generate &amp; Apply →</button>
+              </div>
+            </div>
+
+            <!-- Digest Auth -->
+            <div class="auth-fields hidden" id="api1-auth-digest">
+              <label class="form-label-sm">Username</label>
+              <input id="api1DigestUser" class="inline-input" type="text" placeholder="username" style="margin-bottom:8px"/>
+              <label class="form-label-sm">Password</label>
+              <div class="auth-input-row">
+                <input id="api1DigestPass" class="inline-input" type="password" placeholder="password"/>
+                <button class="btn-auth-apply" data-api="1" data-type="digest">Apply →</button>
+              </div>
+              <div class="hint" style="margin-top:8px">Digest credentials will be sent as an X-Digest-Auth header note for server-side handling.</div>
+            </div>
+
+            <!-- No Auth placeholder -->
+            <div class="auth-fields hidden" id="api1-auth-none">
+              <div class="no-auth-msg">🚫 No authentication will be sent with this request.</div>
+            </div>
+
+            <div class="auth-status-bar" id="api1AuthStatus"></div>
+          </div>
+
+          <!-- CONSOLE PANEL -->
+          <div class="inner-panel hidden" id="api1-panel-console">
+            <div class="console-header">
+              <span class="console-title">Debug Logs</span>
+              <button class="btn-console-clear" data-api="1">Clear</button>
+            </div>
+            <div class="console-body" id="api1Console">
+              <div class="log-line system">Waiting for request...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== API 2 ===== -->
+        <div class="api-card api2-card">
+          <div class="api-card-header">
+            <div class="api-badge api2-badge">API 2</div>
+            <span class="api-label">New API (.NET Microservice)</span>
+            <div class="card-header-actions">
+              <button class="card-import-btn" data-target="api2" data-mode="curl" title="Import cURL into API 2">📋 cURL</button>
+              <button class="card-import-btn" data-target="api2" data-mode="json" title="Import JSON Collection into API 2">📂 Collection</button>
+              <button class="reset-btn" id="resetApi2Btn" title="Reset API 2">↺</button>
+            </div>
+          </div>
+
+          <!-- Inner Tabs -->
+          <div class="inner-tabs">
+            <button class="inner-tab active" data-api="2" data-panel="request">Request</button>
+            <button class="inner-tab" data-api="2" data-panel="auth">🔐 Authorization</button>
+            <button class="inner-tab" data-api="2" data-panel="console">🛠 Console</button>
+          </div>
+
+          <!-- REQUEST PANEL -->
+          <div class="inner-panel" id="api2-panel-request">
+            <div class="form-row">
+              <div class="method-select-wrap">
+                <select id="api2Method" class="method-select">
+                  <option>GET</option><option selected>POST</option>
+                  <option>PUT</option><option>PATCH</option><option>DELETE</option>
+                </select>
+              </div>
+              <input id="api2Url" class="url-input" type="url" placeholder="https://dotnet-service.company.com/api/endpoint"/>
+            </div>
+
+            <div class="subsection-label">Headers</div>
+            <div id="api2Headers" class="kv-list">
+              <div class="kv-row">
+                <input class="kv-key" placeholder="Key" value="Content-Type"/>
+                <input class="kv-val" placeholder="Value" value="application/json"/>
+                <button class="kv-del">✕</button>
+              </div>
+            </div>
+            <button class="add-kv-btn" data-target="api2Headers">+ Add Header</button>
+
+            <div class="subsection-label">Request Body <span class="hint-inline">(JSON)</span></div>
+            <textarea id="api2Body" class="mono-area body-area" rows="6" placeholder='{"key": "value"}'></textarea>
+
+            <div class="subsection-label">Query Params</div>
+            <div id="api2Params" class="kv-list"></div>
+            <button class="add-kv-btn" data-target="api2Params">+ Add Param</button>
+
+            <!-- Send Button -->
+            <div class="send-bar">
+              <button class="btn-send api2-send" id="sendApi2Btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Send Request
+              </button>
+              <span class="send-status" id="send2Status"></span>
+            </div>
+            <!-- Inline Response -->
+            <div class="inline-response hidden" id="inlineResp2">
+              <div class="inline-resp-header">
+                <span class="inline-resp-title">Response</span>
+                <span id="inline2StatusPill" class="status-pill"></span>
+                <span id="inline2TimePill" class="time-pill"></span>
+                <span id="inline2SizePill" class="size-pill"></span>
+                <button class="inline-resp-close" id="closeInline2">✕</button>
+              </div>
+              <div class="inline-resp-tabs">
+                <button class="iresp-tab active" data-resp="2" data-pane="body">Body</button>
+                <button class="iresp-tab" data-resp="2" data-pane="headers">Headers</button>
+              </div>
+              <pre class="inline-resp-pre" id="inline2Body"></pre>
+              <pre class="inline-resp-pre hidden" id="inline2Headers"></pre>
+            </div>
+          </div>
+
+          <!-- AUTH PANEL -->
+          <div class="inner-panel hidden" id="api2-panel-auth">
+            <div class="auth-type-row">
+              <label class="form-label-sm">Auth Type</label>
+              <select id="api2AuthType" class="auth-type-select">
+                <option value="none">No Auth</option>
+                <option value="bearer" selected>Bearer Token</option>
+                <option value="basic">Basic Auth</option>
+                <option value="apikey">API Key</option>
+                <option value="oauth2">OAuth 2.0</option>
+                <option value="jwt">JWT Bearer</option>
+                <option value="digest">Digest Auth</option>
+              </select>
+            </div>
+            <div class="auth-desc" id="api2AuthDesc">Token will be added to the Authorization header as <code>Bearer &lt;token&gt;</code></div>
+
+            <!-- Bearer Token -->
+            <div class="auth-fields" id="api2-auth-bearer">
+              <label class="form-label-sm">Token</label>
+              <div class="auth-input-row">
+                <input id="api2BearerToken" class="inline-input" type="text" placeholder="eyJhbGciOiJSUzI1NiJ9..."/>
+                <button class="btn-auth-apply" data-api="2" data-type="bearer">Apply →</button>
+              </div>
+            </div>
+
+            <!-- Basic Auth -->
+            <div class="auth-fields hidden" id="api2-auth-basic">
+              <label class="form-label-sm">Username</label>
+              <input id="api2BasicUser" class="inline-input" type="text" placeholder="username" style="margin-bottom:8px"/>
+              <label class="form-label-sm">Password</label>
+              <div class="auth-input-row">
+                <input id="api2BasicPass" class="inline-input" type="password" placeholder="password"/>
+                <button class="btn-auth-apply" data-api="2" data-type="basic">Apply →</button>
+              </div>
+            </div>
+
+            <!-- API Key -->
+            <div class="auth-fields hidden" id="api2-auth-apikey">
+              <label class="form-label-sm">Key Name</label>
+              <input id="api2ApiKeyName" class="inline-input" type="text" placeholder="X-API-Key" value="X-API-Key" style="margin-bottom:8px"/>
+              <label class="form-label-sm">Key Value</label>
+              <div class="auth-input-row">
+                <input id="api2ApiKeyVal" class="inline-input" type="text" placeholder="your-api-key-value"/>
+                <button class="btn-auth-apply" data-api="2" data-type="apikey">Apply →</button>
+              </div>
+              <label class="form-label-sm" style="margin-top:8px">Add to</label>
+              <select id="api2ApiKeyIn" class="auth-type-select" style="margin-top:4px">
+                <option value="header">Header</option>
+                <option value="query">Query Param</option>
+              </select>
+            </div>
+
+            <!-- OAuth 2.0 -->
+            <div class="auth-fields hidden" id="api2-auth-oauth2">
+              <div class="oauth-grid">
+                <div class="form-group-inline">
+                  <label class="form-label-sm">Grant Type</label>
+                  <select id="api2OauthGrant" class="method-select">
+                    <option value="client_credentials">Client Credentials</option>
+                    <option value="password">Password (ROPC)</option>
+                    <option value="custom_token">Paste Token Directly</option>
+                  </select>
+                </div>
+                <div class="form-group-inline" id="api2TokenUrlGroup">
+                  <label class="form-label-sm">Token URL</label>
+                  <input id="api2TokenUrl" class="inline-input" type="url" placeholder="https://auth.server.com/oauth/token"/>
+                </div>
+                <div class="form-group-inline" id="api2ClientIdGroup">
+                  <label class="form-label-sm">Client ID</label>
+                  <input id="api2ClientId" class="inline-input" type="text" placeholder="client_id"/>
+                </div>
+                <div class="form-group-inline" id="api2ClientSecretGroup">
+                  <label class="form-label-sm">Client Secret</label>
+                  <input id="api2ClientSecret" class="inline-input" type="password" placeholder="client_secret"/>
+                </div>
+                <div class="form-group-inline hidden" id="api2UsernameGroup">
+                  <label class="form-label-sm">Username</label>
+                  <input id="api2Username" class="inline-input" type="text" placeholder="username"/>
+                </div>
+                <div class="form-group-inline hidden" id="api2PasswordGroup">
+                  <label class="form-label-sm">Password</label>
+                  <input id="api2Password" class="inline-input" type="password" placeholder="password"/>
+                </div>
+                <div class="form-group-inline" id="api2ScopeGroup">
+                  <label class="form-label-sm">Scope <span class="hint-inline">(optional)</span></label>
+                  <input id="api2Scope" class="inline-input" type="text" placeholder="api read write"/>
+                </div>
+                <div class="form-group-inline hidden" id="api2DirectTokenGroup" style="grid-column:1/-1">
+                  <label class="form-label-sm">Paste Token</label>
+                  <textarea id="api2DirectToken" class="mono-area" rows="2" placeholder="eyJhbGciOiJSUzI1NiJ9..."></textarea>
+                </div>
+              </div>
+              <div class="oauth-footer">
+                <button class="btn-oauth" id="getToken2Btn">
+                  <span id="getToken2Spinner" class="mini-spinner hidden"></span>
+                  ⚡ Get Token &amp; Inject
+                </button>
+                <span id="oauth2Info" class="oauth-info"></span>
+              </div>
+            </div>
+
+            <!-- JWT Bearer -->
+            <div class="auth-fields hidden" id="api2-auth-jwt">
+              <label class="form-label-sm">Algorithm</label>
+              <select id="api2JwtAlgo" class="auth-type-select" style="margin-bottom:8px">
+                <option>HS256</option><option>HS384</option><option>HS512</option><option>RS256</option>
+              </select>
+              <label class="form-label-sm">Secret / Key</label>
+              <input id="api2JwtSecret" class="inline-input" type="text" placeholder="secret or PEM key" style="margin-bottom:8px"/>
+              <label class="form-label-sm">Payload (JSON)</label>
+              <textarea id="api2JwtPayload" class="mono-area" rows="3" placeholder='{"sub":"user","iat":1700000000}'></textarea>
+              <div class="auth-input-row" style="margin-top:8px">
+                <button class="btn-auth-apply" data-api="2" data-type="jwt">Generate &amp; Apply →</button>
+              </div>
+            </div>
+
+            <!-- Digest Auth -->
+            <div class="auth-fields hidden" id="api2-auth-digest">
+              <label class="form-label-sm">Username</label>
+              <input id="api2DigestUser" class="inline-input" type="text" placeholder="username" style="margin-bottom:8px"/>
+              <label class="form-label-sm">Password</label>
+              <div class="auth-input-row">
+                <input id="api2DigestPass" class="inline-input" type="password" placeholder="password"/>
+                <button class="btn-auth-apply" data-api="2" data-type="digest">Apply →</button>
+              </div>
+            </div>
+
+            <!-- No Auth -->
+            <div class="auth-fields hidden" id="api2-auth-none">
+              <div class="no-auth-msg">🚫 No authentication will be sent with this request.</div>
+            </div>
+
+            <div class="auth-status-bar" id="api2AuthStatus"></div>
+          </div>
+
+          <!-- CONSOLE PANEL -->
+          <div class="inner-panel hidden" id="api2-panel-console">
+            <div class="console-header">
+              <span class="console-title">Debug Logs</span>
+              <button class="btn-console-clear" data-api="2">Clear</button>
+            </div>
+            <div class="console-body" id="api2Console">
+              <div class="log-line system">Waiting for request...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Options Row -->
+      <div class="options-row">
+        <div class="options-card">
+          <div class="options-title">Comparison Options</div>
+          <label class="toggle-row"><input type="checkbox" id="optCaseInsensitiveKey" checked/><span class="toggle-slider"></span><span>Ignore JSON key case</span></label>
+          <label class="toggle-row"><input type="checkbox" id="optIgnoreArrayOrder"/><span class="toggle-slider"></span><span>Ignore array element order</span></label>
+          <label class="toggle-row"><input type="checkbox" id="optIgnoreExtraKeys"/><span class="toggle-slider"></span><span>Ignore extra keys in API 2</span></label>
+          <label class="toggle-row"><input type="checkbox" id="optCaseInsensitiveVal"/><span class="toggle-slider"></span><span>Ignore value case (strings)</span></label>
+        </div>
+        <div class="options-card">
+          <div class="options-title">Proxy / CORS Settings</div>
+          <label class="toggle-row highlight">
+            <input type="checkbox" id="optPostmanMode" checked/>
+            <span class="toggle-slider"></span>
+            <span><strong>Postman Mode</strong> (Bypass CORS via Node server)</span>
+          </label>
+          <div class="hint" style="margin-bottom:12px">Recommended for VPN/Internal APIs. This routes requests through your local server.</div>
+          
+          <label class="form-label-sm">Backup CORS Proxy URL <span class="hint-inline">(only if Postman Mode is OFF)</span></label>
+          <input id="proxyUrl" class="inline-input" type="url" placeholder="https://cors-anywhere.example.com/"/>
+          <label class="form-label-sm">Request Timeout (ms)</label>
+          <input id="reqTimeout" class="inline-input" type="number" value="30000" min="1000" max="120000"/>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======= RESULTS TAB ======= -->
+    <section class="tab-panel hidden" id="tab-results">
+      <div class="results-placeholder" id="resultsPlaceholder">
+        <div class="placeholder-icon">⚡</div>
+        <div class="placeholder-title">No comparison run yet</div>
+        <div class="placeholder-sub">Configure your APIs and click <strong>Run Comparison</strong></div>
+      </div>
+      <div class="results-content hidden" id="resultsContent">
+        <div class="summary-strip" id="summaryStrip"></div>
+        <div class="detail-grid">
+          <div class="response-card">
+            <div class="response-card-header api1-border">
+              <span class="api-badge api1-badge">API 1</span>
+              <span id="r1Status" class="status-pill"></span>
+              <span id="r1Time" class="time-pill"></span>
+              <span id="r1Size" class="size-pill"></span>
+            </div>
+            <div class="resp-section-label">Response Headers</div>
+            <pre id="r1Headers" class="resp-pre"></pre>
+            <div class="resp-section-label">Response Body</div>
+            <pre id="r1Body" class="resp-pre resp-body"></pre>
+          </div>
+          <div class="response-card">
+            <div class="response-card-header api2-border">
+              <span class="api-badge api2-badge">API 2</span>
+              <span id="r2Status" class="status-pill"></span>
+              <span id="r2Time" class="time-pill"></span>
+              <span id="r2Size" class="size-pill"></span>
+            </div>
+            <div class="resp-section-label">Response Headers</div>
+            <pre id="r2Headers" class="resp-pre"></pre>
+            <div class="resp-section-label">Response Body</div>
+            <pre id="r2Body" class="resp-pre resp-body"></pre>
+          </div>
+        </div>
+        <div class="diff-section" id="diffSection">
+          <div class="diff-header">
+            <span class="diff-title">🔍 JSON Diff Analysis</span>
+            <span id="diffSummaryBadge" class="diff-badge"></span>
+          </div>
+          <div id="diffTable"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======= REPORT TAB ======= -->
+    <section class="tab-panel hidden" id="tab-report">
+      <div class="report-toolbar">
+        <span class="report-toolbar-title">📄 Markdown Report</span>
+        <div class="report-toolbar-actions">
+          <button class="btn-ghost" id="copyReportBtn">📋 Copy</button>
+          <button class="btn-primary" id="downloadReportBtn">⬇ Download .md</button>
+        </div>
+      </div>
+      <div class="report-placeholder" id="reportPlaceholder">
+        <div class="placeholder-icon">📋</div>
+        <div class="placeholder-title">Report not generated yet</div>
+        <div class="placeholder-sub">Run a comparison first</div>
+      </div>
+      <textarea id="reportArea" class="report-area hidden" readonly></textarea>
+    </section>
+
+    <!-- Footer / Path Info -->
+    <footer class="app-footer">
+      <div class="footer-info">
+        <span class="footer-label">📁 Project Folder:</span>
+        <code class="footer-path">c:\Users\atish\Documents\Companyworks\APICompare</code>
+      </div>
+      <div class="footer-hint">Reports are saved to your browser's <strong>Downloads</strong> folder.</div>
+    </footer>
+  </main>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay hidden" id="loadingOverlay">
+    <div class="loading-card">
+      <div class="spinner"></div>
+      <div class="loading-title">Running Comparison…</div>
+      <div class="loading-steps">
+        <div class="ls" id="ls1">🔄 Sending API 1 request…</div>
+        <div class="ls" id="ls2">⏳ Waiting for API 2…</div>
+        <div class="ls" id="ls3">🔍 Comparing responses…</div>
+        <div class="ls" id="ls4">📊 Building report…</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
