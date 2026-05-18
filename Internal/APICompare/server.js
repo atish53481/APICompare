@@ -50,12 +50,19 @@ const server = http.createServer((req, res) => {
     const lib = targetParsed.protocol === 'https:' ? https : http;
 
     // Remove headers that might cause the internal API to reject the proxied request
+    const bodyLength = parseInt(req.headers['content-length'] || '0');
+    const hasBody = bodyLength > 0 || !!req.headers['transfer-encoding'];
+
     const cleanHeaders = { ...req.headers };
     delete cleanHeaders['host'];
     delete cleanHeaders['origin'];
     delete cleanHeaders['referer'];
     delete cleanHeaders['connection'];
-    delete cleanHeaders['content-length']; // Let Node recalculate if needed
+    // Only strip content-length if there is no body — preserving it avoids
+    // forced chunked-transfer-encoding, which many APIs (especially DELETE) reject
+    if (!hasBody) {
+      delete cleanHeaders['content-length'];
+    }
 
     // Check for corporate VPN / system proxy environment variables
     const proxyUrlEnv = process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY;
@@ -85,7 +92,14 @@ const server = http.createServer((req, res) => {
       res.end(`Proxy Error: ${err.message}`);
     });
 
-    req.pipe(proxyReq);
+    // Only pipe a body when one actually exists.
+    // Piping a bodyless request causes Node to use chunked encoding,
+    // which breaks many DELETE / GET endpoints.
+    if (hasBody) {
+      req.pipe(proxyReq);
+    } else {
+      proxyReq.end();
+    }
     return;
   }
 

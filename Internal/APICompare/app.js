@@ -407,18 +407,22 @@ $('modalImportBtn').addEventListener('click',()=>{
 function importCurl(raw, target) {
   try {
     const curl = raw.replace(/\\\s*\n/g,' ').replace(/\s+/g,' ').trim();
-    const methodM = curl.match(/-X\s+([A-Z]+)/i);
+    // Support both -X and --request for method
+    const methodM = curl.match(/(?:-X|--request)\s+([A-Za-z]+)/i);
     let method = methodM ? methodM[1].toUpperCase() : 'GET';
-    const urlM = curl.match(/curl\s+(?:-[^\s]+\s+[^\s]+\s+)*['"]?(https?:\/\/[^'" ]+)['"]?/i)
+    // URL: primary pattern then simple fallback
+    const urlM = curl.match(/curl\s+(?:(?:--?[^\s]+)(?:\s+[^\s]+)?\s+)*['"]?(https?:\/\/[^'" ]+)['"]?/i)
               || curl.match(/['"]?(https?:\/\/[^'" ]+)['"]?/);
     const url = urlM ? urlM[1] : '';
+    // Support both -H and --header (Postman export style)
     const headers = {};
-    [...curl.matchAll(/-H\s+['"]([^'"]+)['"]/gi)].forEach(m=>{
+    [...curl.matchAll(/(?:-H|--header)\s+['"]([^'"]+)['"]/gi)].forEach(m=>{
       const ci=m[1].indexOf(':'); if(ci>-1) headers[m[1].slice(0,ci).trim()]=m[1].slice(ci+1).trim();
     });
-    const dataM = curl.match(/(?:-d|--data(?:-raw)?)\s+'([\s\S]+?)'/i)
-               || curl.match(/(?:-d|--data(?:-raw)?)\s+"([\s\S]+?)"/i)
-               || curl.match(/(?:-d|--data(?:-raw)?)\s+(\{[\s\S]+?\})/i);
+    // Support -d, --data, --data-raw, --data-binary
+    const dataM = curl.match(/(?:-d|--data(?:-raw|-binary)?)\s+'([\s\S]+?)'/i)
+               || curl.match(/(?:-d|--data(?:-raw|-binary)?)\s+"([\s\S]+?)"/i)
+               || curl.match(/(?:-d|--data(?:-raw|-binary)?)\s+(\{[\s\S]+?\})/i);
     let body=''; if(dataM){body=dataM[1].trim(); if(method==='GET')method='POST';}
     applyToApi(target,{method,url,headers,body,params:{}});
     showToast(`cURL imported → ${target==='api1'?'API 1':'API 2'}`,'success');
@@ -452,9 +456,18 @@ function applyToApi(target,{method,url,headers,body,params}) {
   $(`${sfx}Method`).value=method;
   $(`${sfx}Url`).value=url;
   try{$(`${sfx}Body`).value=JSON.stringify(JSON.parse(body),null,2);}catch{$(`${sfx}Body`).value=body;}
+  // Preserve existing Authorization so it survives successive imports
+  let existingAuth=null;
+  qsa(`#${sfx}Headers .kv-row`).forEach(row=>{
+    if(row.querySelector('.kv-key').value.trim().toLowerCase()==='authorization')
+      existingAuth=row.querySelector('.kv-val').value;
+  });
+  const hasImportedAuth=Object.keys(headers).some(k=>k.toLowerCase()==='authorization');
   $(`${sfx}Headers`).innerHTML='';
   Object.entries(headers).forEach(([k,v])=>addKvRow(`${sfx}Headers`,k,v));
   if(!Object.keys(headers).length) addKvRow(`${sfx}Headers`,'Content-Type','application/json');
+  // Restore saved auth if the new import didn't bring its own
+  if(!hasImportedAuth && existingAuth) addKvRow(`${sfx}Headers`,'Authorization',existingAuth);
   $(`${sfx}Params`).innerHTML='';
   Object.entries(params).forEach(([k,v])=>addKvRow(`${sfx}Params`,k,v));
 }

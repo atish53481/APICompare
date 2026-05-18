@@ -45,6 +45,11 @@ python -m http.server 7788
 - **Detailed JSON Diff**: Side-by-side comparison with smart delta detection.
 - **Markdown Reporting**: Clean, ready-to-share migration validation reports.
 
+## 🛠️ Technology Stack
+- **Frontend**: Vanilla HTML5, CSS3, and JavaScript (ES6+). Uses custom CSS for styling (Glassmorphism).
+- **Backend & Proxy**: Node.js (`server.js`) to handle CORS-bypassing ("Postman Mode") and corporate proxy integration.
+- **Dependencies**: `https-proxy-agent` for corporate VPN/proxy support.
+
 ## 📁 File Structure
 - `index.html`: Main UI & structure.
 - `app.js`: Application logic & auth handlers.
