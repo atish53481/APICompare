@@ -390,23 +390,37 @@ $('modalImportBtn').addEventListener('click',()=>{
 // ── cURL Parser ────────────────────────────────────────────────────
 function importCurl(raw, target) {
   try {
-    const curl = raw.replace(/\\\s*\n/g,' ').replace(/\s+/g,' ').trim();
-    const methodM = curl.match(/-X\s+([A-Z]+)/i);
+    // Normalize line continuations and collapse whitespace
+    const curl = raw.replace(/\\\r?\n/g,' ').replace(/\s+/g,' ').trim();
+
+    // Method: -X / --request / request (Postman exports)
+    const methodM = curl.match(/(?:-X|--request|request)\s+([A-Z]+)/i);
     let method = methodM ? methodM[1].toUpperCase() : 'GET';
-    const urlM = curl.match(/curl\s+(?:-[^\s]+\s+[^\s]+\s+)*['"]?(https?:\/\/[^'" ]+)['"]?/i)
+
+    // URL: first bare https?:// token after 'curl'
+    const urlM = curl.match(/curl\s[^]*?['"]?(https?:\/\/[^'" ]+)['"]?/i)
               || curl.match(/['"]?(https?:\/\/[^'" ]+)['"]?/);
-    const url = urlM ? urlM[1] : '';
+    const url = urlM ? urlM[1].replace(/['"]$/,'') : '';
+
+    // Headers: -H / --header  (both short and long form)
     const headers = {};
-    [...curl.matchAll(/-H\s+['"]([^'"]+)['"]/gi)].forEach(m=>{
-      const ci=m[1].indexOf(':'); if(ci>-1) headers[m[1].slice(0,ci).trim()]=m[1].slice(ci+1).trim();
+    [...curl.matchAll(/(?:-H|--header)\s+['"]([^'"]+)['"]/gi)].forEach(m => {
+      const ci = m[1].indexOf(':');
+      if (ci > -1) headers[m[1].slice(0,ci).trim()] = m[1].slice(ci+1).trim();
     });
-    const dataM = curl.match(/(?:-d|--data(?:-raw)?)\s+'([\s\S]+?)'/i)
-               || curl.match(/(?:-d|--data(?:-raw)?)\s+"([\s\S]+?)"/i)
-               || curl.match(/(?:-d|--data(?:-raw)?)\s+(\{[\s\S]+?\})/i);
-    let body=''; if(dataM){body=dataM[1].trim(); if(method==='GET')method='POST';}
-    applyToApi(target,{method,url,headers,body,params:{}});
-    showToast(`cURL imported → ${target==='api1'?'API 1':'API 2'}`,'success');
-  } catch(e){ showToast('cURL parse error: '+e.message,'error'); }
+
+    // Body: -d / --data / --data-raw / --data-binary / --data-urlencode / --body
+    const dataM = curl.match(/(?:-d|--data(?:-raw|-binary|-urlencode)?|--body)\s+'([\s\S]+?)(?='\s*(?:-|$))/i)
+               || curl.match(/(?:-d|--data(?:-raw|-binary|-urlencode)?|--body)\s+"([\s\S]+?)(?="\s*(?:-|$))/i)
+               || curl.match(/(?:-d|--data(?:-raw|-binary|-urlencode)?|--body)\s+'([^']+)'/i)
+               || curl.match(/(?:-d|--data(?:-raw|-binary|-urlencode)?|--body)\s+"([^"]+)"/i)
+               || curl.match(/(?:-d|--data(?:-raw|-binary|-urlencode)?|--body)\s+(\{[\s\S]+?\})/i);
+    let body = '';
+    if (dataM) { body = dataM[1].trim(); if (method === 'GET') method = 'POST'; }
+
+    applyToApi(target, {method, url, headers, body, params: {}});
+    showToast(`cURL imported → ${target==='api1'?'API 1':'API 2'}`, 'success');
+  } catch(e) { showToast('cURL parse error: '+e.message, 'error'); }
 }
 
 // ── Postman JSON Parser ────────────────────────────────────────────
@@ -431,16 +445,31 @@ function applyFromPm(req, target) {
   const params={}; (req.url?.query||[]).forEach(q=>{if(q.key)params[q.key]=q.value||'';});
   applyToApi(target,{method,url,headers,body,params});
 }
-function applyToApi(target,{method,url,headers,body,params}) {
-  const sfx=target;
-  $(`${sfx}Method`).value=method;
-  $(`${sfx}Url`).value=url;
-  try{$(`${sfx}Body`).value=JSON.stringify(JSON.parse(body),null,2);}catch{$(`${sfx}Body`).value=body;}
-  $(`${sfx}Headers`).innerHTML='';
-  Object.entries(headers).forEach(([k,v])=>addKvRow(`${sfx}Headers`,k,v));
-  if(!Object.keys(headers).length) addKvRow(`${sfx}Headers`,'Content-Type','application/json');
-  $(`${sfx}Params`).innerHTML='';
-  Object.entries(params).forEach(([k,v])=>addKvRow(`${sfx}Params`,k,v));
+function applyToApi(target, {method, url, headers, body, params}) {
+  const sfx = target;
+  $(`${sfx}Method`).value = method;
+  $(`${sfx}Url`).value = url;
+  try { $(`${sfx}Body`).value = JSON.stringify(JSON.parse(body), null, 2); } catch { $(`${sfx}Body`).value = body; }
+
+  // Preserve existing Authorization headers — only overwrite non-auth rows
+  const existingRows = qsa(`#${sfx}Headers .kv-row`);
+  const preservedAuth = {};
+  existingRows.forEach(row => {
+    const k = row.querySelector('.kv-key').value.trim();
+    const v = row.querySelector('.kv-val').value.trim();
+    if (k.toLowerCase() === 'authorization' && v && !headers['Authorization'] && !headers['authorization']) {
+      preservedAuth[k] = v;
+    }
+  });
+
+  // Rebuild headers list
+  $(`${sfx}Headers`).innerHTML = '';
+  const merged = Object.assign({}, preservedAuth, headers);
+  Object.entries(merged).forEach(([k,v]) => addKvRow(`${sfx}Headers`, k, v));
+  if (!Object.keys(merged).length) addKvRow(`${sfx}Headers`, 'Content-Type', 'application/json');
+
+  $(`${sfx}Params`).innerHTML = '';
+  Object.entries(params).forEach(([k,v]) => addKvRow(`${sfx}Params`, k, v));
 }
 
 // ── Build Fetch Config ─────────────────────────────────────────────
@@ -456,9 +485,18 @@ function buildFetchOptions(sfx) {
   const pe = Object.entries(params);
   if(pe.length) finalUrl+=(rawUrl.includes('?')?'&':'?')+new URLSearchParams(pe).toString();
   if(proxy) finalUrl=proxy.replace(/\/$/,'')+'/'+finalUrl;
-  const opts={method,headers};
-  if(!['GET','HEAD'].includes(method)&&body) opts.body=body;
-  return {url:finalUrl,opts,rawUrl};
+  const opts = {method, headers};
+  // Only attach a body for methods that semantically carry one
+  // DELETE with no body must NOT send body (some servers reject it)
+  const NO_BODY_METHODS = ['GET','HEAD'];
+  const OPTIONAL_BODY_METHODS = ['DELETE','OPTIONS'];
+  if (!NO_BODY_METHODS.includes(method) && body) {
+    // For DELETE/OPTIONS only attach if the user explicitly typed something
+    if (!OPTIONAL_BODY_METHODS.includes(method) || body.trim()) {
+      opts.body = body;
+    }
+  }
+  return {url: finalUrl, opts, rawUrl};
 }
 
 // ── Timed Fetch ────────────────────────────────────────────────────
